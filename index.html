@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <meta name="theme-color" content="#000000">
-<title>CODE FLOW — TypeScript real, evita el rojo</title>
+<title>CODE FLOW — real TypeScript, dodge the red</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{width:100%;height:100%;overflow:hidden;background:#000;
@@ -46,19 +46,20 @@
   <div id="start" class="card">
     <h1>CODE&nbsp;<span class="ts">FLOW</span></h1>
     <div class="sub">
-      <span class="ts">TypeScript real</span> corriendo de izquierda a derecha →<br>
-      arrastra el dedo / mouse: tú eres el <b>█ cursor</b><br>
-      esquiva las <span class="red">letras rojas</span> — si las tocas, <span class="red">explota</span><br>
-      recoge los <b>⬡ tokens</b> verdes para subir tu score
+      <span class="ts">real TypeScript</span> streaming left to right →<br>
+      drag your finger / mouse: you are the <b>█ cursor</b><br>
+      dodge the <span class="red">red letters</span> — touch one and you <span class="red">explode</span><br>
+      grab the green <b>⬡ tokens</b> to raise your score
     </div>
-    <div class="hint">toca / clic para iniciar <span class="blink">█</span></div>
+    <div class="hint">on mobile the cursor floats above your finger</div>
+    <div class="hint" style="margin-top:10px">tap / click to start <span class="blink">█</span></div>
   </div>
   <div id="over" class="card hidden">
     <div class="fault">SEGMENTATION FAULT</div>
-    <div class="sub" style="margin-top:8px;opacity:.7">core dumped — el cursor tocó una letra roja</div>
+    <div class="sub" style="margin-top:8px;opacity:.7">core dumped — the cursor hit a red letter</div>
     <div class="lbl">score</div><div class="val" id="fsc">0</div>
     <div class="best" id="fbest"></div>
-    <div class="hint" style="margin-top:24px">toca para reintentar <span class="blink">█</span></div>
+    <div class="hint" style="margin-top:24px">tap to play again <span class="blink">█</span></div>
   </div>
 </div>
 <script>
@@ -119,6 +120,7 @@ function initRows(){
 const S={MENU:0,PLAY:1,DEAD:2};let state=S.MENU;
 let cur,target,reds,tokens,parts,score,collected,frames,spawnR,spawnT,shake,glitch,diff;
 let best=+(localStorage.getItem('coderain_best')||0);
+let tick=0,diedAt=0,finger={x:0,y:0,on:false};   // tick corre siempre; finger = punto real del dedo
 
 function reset(){
   cur={x:W/2,y:H*0.6,trail:[]};target={x:W/2,y:H*0.6};
@@ -126,17 +128,23 @@ function reset(){
   score=0;collected=0;frames=0;spawnR=0;spawnT=40;shake=0;glitch=0;diff=1;
 }
 
-// ---- input ----
+// ---- input: el cursor flota ARRIBA del dedo para no quedar tapado ----
 function setTarget(e){
-  const x=e.touches?e.touches[0].clientX:e.clientX;
-  const y=e.touches?e.touches[0].clientY:e.clientY;
-  if(x!=null){target.x=x;target.y=y;}
+  let x,y,touch=false;
+  if(e.touches&&e.touches.length){x=e.touches[0].clientX;y=e.touches[0].clientY;touch=true;}
+  else{x=e.clientX;y=e.clientY;touch=(e.pointerType==='touch');}
+  if(x==null)return;
+  finger.x=x;finger.y=y;finger.on=true;
+  const off=touch?Math.max(54,FS*3.6):0;        // separa el cursor del dedo en móvil
+  target.x=x;target.y=Math.max(FS,y-off);
 }
 addEventListener('pointermove',setTarget,{passive:true});
+addEventListener('pointerup',()=>{finger.on=false;});
 function press(e){if(e&&e.cancelable)e.preventDefault();setTarget(e);
-  if(state===S.MENU)startGame();else if(state===S.DEAD&&frames>18)startGame();}
+  if(state===S.MENU)startGame();else if(state===S.DEAD&&(tick-diedAt)>14)startGame();}
 addEventListener('pointerdown',press);
 function startGame(){reset();state=S.PLAY;
+  scEl.textContent='score 0';bsEl.textContent='⬡ 0';
   startCard.classList.add('hidden');overCard.classList.add('hidden');live.style.opacity='1';}
 
 // ---- helpers ----
@@ -156,6 +164,7 @@ function spawnToken(){
 
 // ---- update ----
 function update(){
+  tick++;
   // filas siempre corren →
   for(const r of rows){
     r.x+=r.speed;
@@ -196,10 +205,10 @@ function update(){
 }
 
 function die(){
-  state=S.DEAD;frames=0;shake=26;glitch=1;boom(cur.x,cur.y,'#ff4d6d',70);
+  state=S.DEAD;diedAt=tick;shake=26;glitch=1;boom(cur.x,cur.y,'#ff4d6d',70);
   if(score>best){best=score;localStorage.setItem('coderain_best',best);}
   fsc.textContent=score;
-  fbest.textContent=(score>=best&&score>0?'★ nuevo récord  ':'récord ')+best+'   ·   ⬡ '+collected;
+  fbest.textContent=(score>=best&&score>0?'★ new best  ':'best ')+best+'   ·   ⬡ '+collected;
   live.style.opacity='0';setTimeout(()=>overCard.classList.remove('hidden'),420);
 }
 
@@ -240,14 +249,22 @@ function draw(){
   ctx.globalAlpha=1;
 
   if(state===S.PLAY){
+    // línea guía dedo → cursor (para ubicarlo arriba del dedo)
+    if(finger.on&&Math.hypot(finger.x-cur.x,finger.y-cur.y)>10){
+      ctx.strokeStyle='rgba(124,255,176,0.22)';ctx.lineWidth=2;
+      ctx.setLineDash([4,6]);ctx.beginPath();
+      ctx.moveTo(finger.x,finger.y);ctx.lineTo(cur.x,cur.y);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle='rgba(124,255,176,0.18)';
+      ctx.beginPath();ctx.arc(finger.x,finger.y,6,0,7);ctx.fill();
+    }
     for(let i=0;i<cur.trail.length;i++){
       const t=cur.trail[i],a=i/cur.trail.length;
       ctx.fillStyle=`rgba(124,255,176,${a*0.30})`;
       ctx.fillRect(t.x-FS*0.35,t.y-FS*0.6,FS*0.7,FS*1.2);
     }
-    ctx.strokeStyle='rgba(124,255,176,0.25)';ctx.lineWidth=1;ctx.beginPath();
-    ctx.moveTo(cur.x-26,cur.y);ctx.lineTo(cur.x+26,cur.y);
-    ctx.moveTo(cur.x,cur.y-26);ctx.lineTo(cur.x,cur.y+26);ctx.stroke();
+    ctx.strokeStyle='rgba(124,255,176,0.4)';ctx.lineWidth=1.5;ctx.beginPath();
+    ctx.moveTo(cur.x-30,cur.y);ctx.lineTo(cur.x+30,cur.y);
+    ctx.moveTo(cur.x,cur.y-30);ctx.lineTo(cur.x,cur.y+30);ctx.stroke();
     const blink=(Math.floor(frames/18)%2)===0;
     ctx.shadowColor='#7CFFB0';ctx.shadowBlur=20;
     ctx.fillStyle=blink?'#eafff2':'#7CFFB0';
