@@ -135,8 +135,8 @@ function setTarget(e){
   else{x=e.clientX;y=e.clientY;touch=(e.pointerType==='touch');}
   if(x==null)return;
   finger.x=x;finger.y=y;finger.on=true;
-  const off=touch?Math.max(54,FS*3.6):0;        // separa el cursor del dedo en móvil
-  target.x=x;target.y=Math.max(FS,y-off);
+  const off=touch?Math.max(60,FS*4):0;          // cursor corrido a la IZQUIERDA del dedo
+  target.x=Math.max(FS,x-off);target.y=y;
 }
 addEventListener('pointermove',setTarget,{passive:true});
 addEventListener('pointerup',()=>{finger.on=false;});
