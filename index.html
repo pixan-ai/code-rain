@@ -70,14 +70,14 @@
       <span class="ts">real TypeScript</span> streaming at you through 3D space<br>
       drag your finger / mouse: you are the <b>█ cursor</b><br>
       dodge the <span class="red">red glyphs</span> flying out of the depth — touch one and you <span class="red">explode</span><br>
-      grab the green <b>⬡ tokens</b> — chain them fast for a <b>combo ×9</b><br>
+      grab the spinning <b>green gems</b> — chain them fast for a <b>combo ×9</b><br>
       shave a <span class="red">red</span> without dying → <b>near-miss bonus</b>
     </div>
     <div id="mbest" class="best"></div>
     <div class="hint">on mobile the cursor floats beside your finger</div>
     <div class="hint" style="margin-top:10px">tap / click to start <span class="blink">█</span></div>
     <div class="hint btn" id="daily" style="margin-top:16px">▦ daily run</div>
-    <div class="best" style="opacity:.35;margin-top:16px">v3.3 · 1 file · 0 deps</div>
+    <div class="best" style="opacity:.35;margin-top:16px">v3.4 · 1 file · 0 deps</div>
   </div>
   <div id="over" class="card hidden">
     <div class="fault" id="fault">SEGMENTATION FAULT</div>
@@ -131,6 +131,33 @@ const SRC=document.documentElement.outerHTML.split('\n')
   .map(s=>s.length>90?s.slice(0,88)+'…':s);
 let srcI=Math.floor(Math.random()*SRC.length);
 const nextLine=()=>SRC[srcI++%SRC.length];
+
+// ---- gema 3D procedural: pintada una vez a un canvas offscreen, gira como moneda ----
+const gemCv=document.createElement('canvas');gemCv.width=gemCv.height=144;
+(function(){
+  const g=gemCv.getContext('2d'),C=72,R=60;
+  function hex(r){g.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/2;
+    g[i?'lineTo':'moveTo'](C+r*Math.cos(a),C+r*Math.sin(a));}g.closePath();}
+  const base=g.createRadialGradient(C-22,C-26,6,C,C,R+8);
+  base.addColorStop(0,'#eafff2');base.addColorStop(.25,'#9affc4');
+  base.addColorStop(.6,'#34d27b');base.addColorStop(1,'#0a5c33');
+  hex(R);g.fillStyle=base;g.fill();
+  for(let i=0;i<6;i++){ // facetas alternadas luz/sombra
+    const a1=Math.PI/3*i-Math.PI/2,a2=a1+Math.PI/3;
+    g.beginPath();g.moveTo(C,C);
+    g.lineTo(C+R*Math.cos(a1),C+R*Math.sin(a1));
+    g.lineTo(C+R*Math.cos(a2),C+R*Math.sin(a2));g.closePath();
+    g.fillStyle=i%2?'rgba(255,255,255,0.10)':'rgba(0,40,20,0.16)';g.fill();
+  }
+  hex(R*0.52); // mesa superior
+  const tab=g.createLinearGradient(C-30,C-30,C+30,C+30);
+  tab.addColorStop(0,'rgba(234,255,242,.95)');tab.addColorStop(.5,'rgba(124,255,176,.75)');
+  tab.addColorStop(1,'rgba(20,120,70,.85)');
+  g.fillStyle=tab;g.fill();
+  g.beginPath();g.ellipse(C-20,C-26,16,8,-.6,0,7);g.fillStyle='rgba(255,255,255,.85)';g.fill();
+  g.beginPath();g.ellipse(C+14,C+20,7,3.5,-.6,0,7);g.fillStyle='rgba(255,255,255,.35)';g.fill();
+  hex(R);g.lineWidth=3;g.strokeStyle='rgba(234,255,242,.9)';g.stroke();
+})();
 
 // ---- líneas de código en el túnel ----
 let lines=[];
@@ -345,7 +372,7 @@ function update(dt){
     if(Math.abs(tk.z-ZP)<0.45){
       const p=prj(tk.x,tk.y,tk.z);
       const fpx=Math.min(FS*1.5/tk.z,FS*3.4);
-      if(Math.hypot(p[0]-cur.x,p[1]-cur.y)<fpx*0.85+FS*0.6)collect(tk);  // agarras el anillo que ves
+      if(Math.hypot(p[0]-cur.x,p[1]-cur.y)<fpx*1.05+FS*0.6)collect(tk);  // agarras el anillo que ves
     }
   }
   tokens=tokens.filter(tk=>!tk.dead&&tk.z>0.25);
@@ -435,14 +462,25 @@ function draw(){
     for(const tk of tks){
       const p=prj(tk.x,tk.y,tk.z);
       const fpx=Math.min(FS*1.5/tk.z,FS*3.4);
-      const g=0.6+Math.sin(tk.pulse)*0.4;
       const a=clamp((ZFAR-tk.z)/3,0.15,1);
-      ctx.shadowColor='#7CFFB0';ctx.shadowBlur=16*g;
+      const sp=Math.cos(tk.pulse*0.7);                 // giro tipo moneda sobre su eje Y
+      const sw=Math.max(0.18,Math.abs(sp));
+      const s=fpx*2.3;
+      ctx.save();ctx.translate(p[0],p[1]);
+      ctx.rotate(Math.sin(tk.pulse*0.3)*0.14);
       ctx.globalAlpha=a;
-      ctx.fillStyle='#9affc4';ctx.font=(fpx|0)+'px monospace';
-      ctx.fillText('⬡',p[0],p[1]);
+      ctx.shadowColor='#7CFFB0';ctx.shadowBlur=14+8*Math.abs(sp);
+      ctx.scale(sp<0?-sw:sw,1);                        // el espejo vende la cara trasera
+      ctx.drawImage(gemCv,-s/2,-s/2,s,s);
+      ctx.restore();
+      if(Math.abs(sp)<0.35){                           // glint de canto al pasar de perfil
+        ctx.globalAlpha=a*(1-Math.abs(sp)/0.35);
+        ctx.fillStyle='rgba(234,255,242,.9)';
+        ctx.fillRect(p[0]-1.5,p[1]-s*0.45,3,s*0.9);
+      }
+      ctx.globalAlpha=a*0.6;
       ctx.strokeStyle='rgba(154,255,196,.5)';ctx.lineWidth=1.5;  // anillo: forma ≠ color (daltonismo)
-      ctx.beginPath();ctx.arc(p[0],p[1],fpx*0.85,0,7);ctx.stroke();
+      ctx.beginPath();ctx.arc(p[0],p[1],fpx*1.05,0,7);ctx.stroke();
       ctx.shadowBlur=0;ctx.globalAlpha=1;
     }
     const rds=reds.slice().sort((a,b)=>b.z-a.z);
