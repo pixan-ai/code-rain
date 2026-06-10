@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!--
+  CODE FLOW 3D — yes, this is the entire game. 1 file, 0 dependencies.
+  The code flying past you in the tunnel? It's this very file.
+  https://github.com/pixan-ai/code-rain
+-->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -71,15 +76,17 @@
     <div id="mbest" class="best"></div>
     <div class="hint">on mobile the cursor floats beside your finger</div>
     <div class="hint" style="margin-top:10px">tap / click to start <span class="blink">█</span></div>
-    <div class="best" style="opacity:.35;margin-top:16px">v3.2</div>
+    <div class="hint btn" id="daily" style="margin-top:16px">▦ daily run</div>
+    <div class="best" style="opacity:.35;margin-top:16px">v3.3 · 1 file · 0 deps</div>
   </div>
   <div id="over" class="card hidden">
-    <div class="fault">SEGMENTATION FAULT</div>
-    <div class="sub" style="margin-top:8px;opacity:.7">core dumped — the cursor hit a red glyph</div>
+    <div class="fault" id="fault">SEGMENTATION FAULT</div>
+    <div class="sub" id="ferr" style="margin-top:8px;opacity:.7">core dumped — the cursor hit a red glyph</div>
     <div class="lbl">score</div><div class="val" id="fsc">0</div>
     <div class="best" id="fbest"></div>
     <div class="hint btn" id="share" style="margin-top:20px">⤴ share</div>
     <div class="hint" style="margin-top:16px">tap to play again <span class="blink">█</span></div>
+    <div class="hint" id="tomenu" style="margin-top:8px;opacity:.55">menu</div>
   </div>
   <div id="pause" class="card hidden">
     <div class="fault ok">PAUSED</div>
@@ -118,35 +125,17 @@ function resize(){
 addEventListener('resize',resize);
 if(window.visualViewport)visualViewport.addEventListener('resize',resize);
 
-// ---- TypeScript REAL y válido volando hacia la cámara ----
-const TS=[
-`interface Player { id: number; name: string; score: number; alive: boolean; }`,
-`type Vec2 = { readonly x: number; readonly y: number };`,
-`const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));`,
-`function distance(a: Vec2, b: Vec2): number { return Math.hypot(a.x - b.x, a.y - b.y); }`,
-`class Entity<T extends Vec2> { constructor(public pos: T, public vel: T) {} }`,
-`async function load<T>(url: string): Promise<T> { const r = await fetch(url); return r.json() as Promise<T>; }`,
-`const isAlive = (p: Player): p is Player => p.alive === true;`,
-`type Result<T> = { ok: true; value: T } | { ok: false; error: string };`,
-`enum Direction { Left = "L", Right = "R", Up = "U", Down = "D" }`,
-`const players = new Map<string, Player>();`,
-`function reducer(state: State, action: Action): State { return { ...state }; }`,
-`type Awaited<T> = T extends Promise<infer U> ? Awaited<U> : T;`,
-`const tuple: readonly [string, number] = ["fps", 60] as const;`,
-`export const useScore = (): [number, () => void] => useReducer(r, 0);`,
-`const partial: Partial<Player> = { score: 0 };`,
-`function* range(n: number): Generator<number> { for (let i = 0; i < n; i++) yield i; }`,
-`const onMove: (e: PointerEvent) => void = (e) => cursor.set(e.clientX, e.clientY);`,
-`type Keys<T> = { [K in keyof T]: T[K] extends Function ? K : never }[keyof T];`,
-`const safe = obj?.deep?.value ?? defaultValue;`,
-`let entities: ReadonlyArray<Entity<Vec2>> = [];`,
-];
-const randTS=()=>TS[Math.floor(Math.random()*TS.length)];
+// ---- el túnel streamea EL PROPIO CÓDIGO DE ESTE ARCHIVO, en orden ----
+const SRC=document.documentElement.outerHTML.split('\n')
+  .map(s=>s.trim()).filter(s=>s.length>10)
+  .map(s=>s.length>90?s.slice(0,88)+'…':s);
+let srcI=Math.floor(Math.random()*SRC.length);
+const nextLine=()=>SRC[srcI++%SRC.length];
 
 // ---- líneas de código en el túnel ----
 let lines=[];
 function recycleLine(L,initial){
-  L.text=randTS();
+  L.text=nextLine();
   L.z=initial?1+Math.random()*(ZFAR-1):ZFAR-Math.random()*2.5;
   L.x=-1.3+Math.random()*1.6;
   L.y=(Math.random()*2-1)*1.0;
@@ -186,6 +175,14 @@ muteBtn.addEventListener('pointerdown',e=>{
   muteBtn.textContent=muted?'🔇':'🔊';
 });
 
+// ---- daily run: misma semilla para todo el mundo, cero backend ----
+const _n=new Date(),dayLocal=Math.floor((_n.getTime()-_n.getTimezoneOffset()*60000)/86400000);
+const dailyN=dayLocal-20613+1;   // daily #1 = 2026-06-09
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+let mode='endless',rngR=Math.random,rngT=Math.random;  // streams separados: rojos y tokens no se desincronizan
+const dailyBtn=document.getElementById('daily');
+dailyBtn.textContent='▦ daily #'+dailyN;
+
 // ---- estado ----
 const S={MENU:0,PLAY:1,DEAD:2,PAUSE:3};let state=S.MENU;
 let cur,target,trail,reds,tokens,parts,pw;
@@ -219,12 +216,22 @@ addEventListener('pointerup',()=>{finger.on=false;});
 function press(e){
   if(e&&e.cancelable)e.preventDefault();
   ac();setTarget(e);
-  if(state===S.MENU)startGame();
-  else if(state===S.DEAD&&deadTime>0.45)startGame();
+  if(state===S.MENU)startGame('endless');
+  else if(state===S.DEAD&&deadTime>0.45)startGame(mode);  // replay del mismo modo
   else if(state===S.PAUSE){state=S.PLAY;pauseCard.classList.add('hidden');document.body.classList.add('playing');}
 }
 addEventListener('pointerdown',press);
-function startGame(){
+dailyBtn.addEventListener('pointerdown',e=>{
+  e.stopPropagation();e.preventDefault();ac();startGame('daily');
+});
+document.getElementById('tomenu').addEventListener('pointerdown',e=>{
+  e.stopPropagation();e.preventDefault();
+  state=S.MENU;overCard.classList.add('hidden');startCard.classList.remove('hidden');
+});
+function startGame(m){
+  mode=m;
+  if(mode==='daily'){rngR=mulberry32(dayLocal*2+1);rngT=mulberry32(dayLocal*2+2);}
+  else{rngR=Math.random;rngT=Math.random;}
   reset();state=S.PLAY;
   startCard.classList.add('hidden');overCard.classList.add('hidden');pauseCard.classList.add('hidden');
   live.style.opacity='1';document.body.classList.add('playing');
@@ -238,26 +245,26 @@ document.addEventListener('visibilitychange',()=>{
 
 // ---- helpers de juego ----
 const REDCHARS=['=>','<T>','async','await','null','any','!','===','...','never','void','as'];
-function redTok(){return REDCHARS[Math.floor(Math.random()*REDCHARS.length)];}
+function redTok(rng){return REDCHARS[Math.floor(rng()*REDCHARS.length)];}
 function boom(x,y,color,n){for(let i=0;i<n;i++)parts.push({
   x,y,vx:(Math.random()-.5)*540,vy:(Math.random()-.5)*540,life:1,
-  ch:Math.random()<.5?redTok():'',color,r:Math.random()*3+1});}
+  ch:Math.random()<.5?redTok(Math.random):'',color,r:Math.random()*3+1});}
 function floatTxt(x,y,txt){parts.push({x,y,vx:0,vy:-55,life:1.1,txt,color:'#9affc4'});}
 function ring(x,y){parts.push({x,y,ring:true,r:8,life:1,color:'#5fd0ff'});}
 
 function frustum(){return[(W/2)/f*0.85,(H/2)/f*0.8];}  // alcance jugable en mundo, plano z=1
 function spawnRed(){
   const[hwx,hwy]=frustum();let x,y;
-  if(Math.random()<0.6){ // apuntado al jugador con jitter — esquivar importa
-    x=clamp(pw.x+(Math.random()-.5)*0.22,-hwx,hwx);
-    y=clamp(pw.y+(Math.random()-.5)*0.22,-hwy,hwy);
-  }else{x=(Math.random()*2-1)*hwx;y=(Math.random()*2-1)*hwy;}
-  reds.push({x,y,z:ZFAR,prevZ:ZFAR,vz:(3.1+Math.random()*1.3)*diff,ch:redTok(),wob:Math.random()*6});
+  if(mode==='endless'&&rngR()<0.6){ // apuntado al jugador con jitter — esquivar importa
+    x=clamp(pw.x+(rngR()-.5)*0.22,-hwx,hwx);
+    y=clamp(pw.y+(rngR()-.5)*0.22,-hwy,hwy);
+  }else{x=(rngR()*2-1)*hwx;y=(rngR()*2-1)*hwy;}  // daily: secuencia idéntica para todos
+  reds.push({x,y,z:ZFAR,prevZ:ZFAR,vz:(3.1+rngR()*1.3)*diff,ch:redTok(rngR),wob:rngR()*6});
 }
 function spawnToken(){
   const[hwx,hwy]=frustum();
-  tokens.push({x:(Math.random()*2-1)*hwx*0.9,y:(Math.random()*2-1)*hwy*0.9,
-    z:ZFAR,vz:2.0+Math.random()*0.7,pulse:Math.random()*6});
+  tokens.push({x:(rngT()*2-1)*hwx*0.9,y:(rngT()*2-1)*hwy*0.9,
+    z:ZFAR,vz:2.0+rngT()*0.7,pulse:rngT()*6});
 }
 function collect(tk){
   tk.dead=true;collected++;
@@ -314,7 +321,7 @@ function update(dt){
   pw.x=(cur.x-W/2)/f;pw.y=(cur.y-H/2)/f;   // posición del jugador en mundo (plano z=ZP=1)
 
   spawnR-=dt;if(spawnR<=0){spawnRed();spawnR=Math.max(0.22,0.85-t/90);}
-  spawnT-=dt;if(spawnT<=0){spawnToken();spawnT=1.5+Math.random()*1.2;}
+  spawnT-=dt;if(spawnT<=0){spawnToken();spawnT=1.5+rngT()*1.2;}
 
   if(combo>0){comboT-=dt;if(comboT<=0){combo=0;shownScore=-1;}}
 
@@ -348,19 +355,39 @@ function update(dt){
   if(glitch>0)glitch-=2.5*dt;
 
   const s=Math.floor(pts);
-  if(s!==shownScore){shownScore=s;scEl.textContent='score '+s+(combo>1?'  ×'+combo:'');}
+  if(s!==shownScore){shownScore=s;
+    scEl.textContent=(mode==='daily'?'▦'+dailyN+' ':'')+'score '+s+(combo>1?'  ×'+combo:'');}
 }
 
+const DEATHS=[
+  ['SEGMENTATION FAULT',"error TS2322: Type 'cursor' is not assignable to type 'alive'"],
+  ['STACK OVERFLOW','RangeError: Maximum call stack size exceeded at dodge()'],
+  ['OOM KILLED','FATAL: JavaScript heap out of memory — cursor leaked'],
+  ['UNCAUGHT EXCEPTION','Unhandled Promise Rejection: PlayerDiedError: hit a red glyph'],
+  ['TYPE ERROR',"error TS2532: Object is possibly 'dead'"],
+  ['KERNEL PANIC','null pointer dereference at 0xDEADBEEF'],
+];
+const faultEl=document.getElementById('fault'),ferrEl=document.getElementById('ferr');
 function die(){
   state=S.DEAD;deadTime=0;cardShown=false;
   shake=RM?0:26;glitch=RM?0.25:1;
   boom(cur.x,cur.y,'#ff4d6d',70);
   noise(0.35,0.25);tone(180,0.5,'sawtooth',0.16,-140);vib([30,40,80]);
-  const score=Math.floor(pts),isNew=score>best;
-  if(isNew){best=score;store('coderain_best',best);}
+  const score=Math.floor(pts);
+  const D=DEATHS[Math.floor(Math.random()*DEATHS.length)];
+  faultEl.textContent=D[0];
+  ferrEl.textContent=D[1]+' — at game.ts:'+score+':'+collected;
   fsc.textContent=score;
-  fbest.textContent=(isNew&&score>0?'★ new best  ':'best ')+best+'   ·   ⬡ '+collected;
-  showBest();
+  if(mode==='daily'){
+    const key='cf_d'+dailyN,db=+(load(key)||0),isNew=score>db;
+    if(isNew)store(key,score);
+    fbest.textContent='▦ daily #'+dailyN+'   ·   '+(isNew&&score>0?'★ new best ':'best ')+Math.max(db,score)+'   ·   ⬡ '+collected;
+  }else{
+    const isNew=score>best;
+    if(isNew){best=score;store('coderain_best',best);}
+    fbest.textContent=(isNew&&score>0?'★ new best  ':'best ')+best+'   ·   ⬡ '+collected;
+    showBest();
+  }
   live.style.opacity='0';document.body.classList.remove('playing');
   shareBtn.textContent='⤴ share';
 }
@@ -369,7 +396,9 @@ function die(){
 shareBtn.addEventListener('pointerdown',e=>e.stopPropagation());
 shareBtn.addEventListener('click',async e=>{
   e.stopPropagation();
-  const txt='CODE FLOW 3D — score '+Math.floor(pts)+' ⬡'+collected+'. Can you dodge real TypeScript?';
+  const txt=mode==='daily'
+    ?'CODE FLOW 3D ▦ Daily #'+dailyN+' — score '+Math.floor(pts)+' ⬡'+collected+'. Same run for everyone, beat me!'
+    :'CODE FLOW 3D — score '+Math.floor(pts)+' ⬡'+collected+'. Can you dodge real TypeScript?';
   const url='https://pixan-ai.github.io/code-rain/';
   try{
     if(navigator.share)await navigator.share({title:'CODE FLOW 3D',text:txt,url});
