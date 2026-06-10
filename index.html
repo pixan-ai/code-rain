@@ -320,14 +320,16 @@ function update(dt){
   const hitBase=(FS*0.9)/f;
   for(const r of reds){
     r.prevZ=r.z;r.z-=r.vz*wdt;r.wob+=6*dt;
-    if(r.prevZ>ZP&&r.z<=ZP){  // cruza el plano del jugador: momento de verdad
+    // letal mientras está a la altura del jugador (ventana de profundidad), no solo en el frame del cruce
+    const inWin=r.z<1.25&&r.z>0.7,crossed=r.prevZ>ZP&&r.z<=ZP;
+    if(inWin||crossed){
       const d=Math.hypot(r.x-pw.x,r.y+Math.sin(r.wob)*0.012-pw.y);
-      const rr=(hitBase+r.ch.length*CW*0.3/f)*0.8;  // hitbox 20% menor que el sprite, a favor del jugador
+      const rr=(hitBase+r.ch.length*CW*0.35/f)*0.8;  // hitbox 20% menor que el sprite, a favor del jugador
       if(d<rr){die();return;}
-      if(d<rr*3)nearMiss(r);
+      if(crossed&&d<rr*3)nearMiss(r);
     }
   }
-  reds=reds.filter(r=>r.z>0.22);
+  reds=reds.filter(r=>r.z>0.5);
 
   const tr=(FS*2.1)/f;
   for(const tk of tokens){
@@ -414,7 +416,7 @@ function draw(){
       const p=prj(r.x,r.y+Math.sin(r.wob)*0.012,r.z);
       const fpx=Math.min(FS*1.25/r.z,FS*3.6);
       let a=clamp((ZFAR-r.z)/3,0.15,1);
-      if(r.z<0.8)a*=clamp((r.z-0.22)/0.58,0,1);
+      if(r.z<0.9)a*=clamp((r.z-0.5)/0.4,0,1);  // se esfuma rápido al dejar de ser letal
       ctx.shadowColor='#ff2d55';ctx.shadowBlur=18;
       ctx.globalAlpha=a;
       ctx.fillStyle='#ff4d6d';ctx.font='bold '+(fpx|0)+'px monospace';
